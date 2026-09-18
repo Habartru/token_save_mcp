@@ -225,6 +225,15 @@ def _hook_dest() -> pathlib.Path:
 
 
 def _install_hook(min_lines: int, mode: str = "block") -> int:
+    # The hook is a Claude Code mechanism. Saying "installed" to a Cursor user
+    # would be a promise the tool cannot keep, so say what will actually happen.
+    if not shutil.which("claude") and not _claude_settings_path().parent.exists():
+        warn("no Claude Code install found — the hook is Claude Code only")
+        print(f"    {DIM}bulk_read and code_write still work in any MCP client; "
+              f"only the automatic blocking needs Claude Code.{RESET}")
+        print(f"    {DIM}Installing anyway in case Claude Code arrives later."
+              f"{RESET}")
+
     if HOOK_SRC is None:
         bad("hook script not found in the installed package or the source tree")
         print("    Reinstall with: pip install --force-reinstall token-save-mcp")

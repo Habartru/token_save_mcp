@@ -7,9 +7,14 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/Habartru/token_save_mcp/blob/main/LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
-An MCP server that sends big files to a cheap worker model and returns only the
-answer. The file bytes are paid for once, in the worker's context — not
-permanently in your agent's.
+Read one 4,000-line file and ~35,000 tokens sit in your agent's context for the
+rest of the session. Read a few more and it compacts, forgets your
+instructions, and every later turn costs more — because each one pays for the
+whole accumulated context again.
+
+This MCP server sends those files to a cheap worker model instead and returns
+only the answer. The bytes are paid for once, in the worker's context, not
+permanently in yours.
 
 ![token-save-mcp in action](https://raw.githubusercontent.com/Habartru/token_save_mcp/main/docs/demo.gif)
 
@@ -24,11 +29,13 @@ into context ≈234 tok (saved 6,808 · 97%)
 worker: glm-5.3-flash | 6,155 in / 278 out | 4.0s
 ```
 
+*(`glm-5.3-flash` is just the worker configured in that run — you pick your own.)*
+
 ---
 
 ## Install
 
-Two commands. Nothing else to install, nothing to configure by hand.
+Two commands, plus an API key of your own.
 
 ```bash
 pip install token-save-mcp
@@ -39,9 +46,12 @@ token-save-mcp init --hook
 your agent, and installs the hook. If you have no key yet it prints the
 options and where to get one.
 
-That is the whole setup. There is no second package, no separate MCP server to
-add, and no external tool to install — the hook is plain Python and ships in
-the package.
+One package, one command. There is no second MCP server to add and no external
+command-line tool to install — the hook is plain Python and ships in the wheel.
+
+You do need **one thing of your own: an API key** from a provider of your
+choice (or a local model, which needs Ollama installed). The worker is yours —
+your key, your provider, your bill.
 
 <details>
 <summary><b>What if I have no API key?</b></summary>
@@ -101,10 +111,59 @@ makes one live call to prove the worker answers:
 ### Requirements
 
 - Python 3.10+
-- An agent that speaks MCP (Claude Code, Cursor, Cline, Windsurf, Codex)
+- An agent that speaks MCP — **Claude Code** for the full experience, since the
+  enforcement hook is a Claude Code mechanism. Cursor, Cline, Windsurf and
+  Codex get the tools, and you call them yourself.
 - An API key from any OpenAI-compatible provider — or a local model, which needs none
 
 Everything else comes with the package.
+
+---
+
+## Where your code goes
+
+This matters more than the token maths, so it goes before it.
+
+**`bulk_read` sends the contents of the files you name to the provider you
+configured.** That is how it works — the worker has to see the code to answer
+about it. Nothing is sent anywhere else: no telemetry, no analytics, no
+phoning home. The savings ledger is a local file.
+
+What that means in practice:
+
+| Your situation | What to do |
+|---|---|
+| Open-source or personal code | Any provider is fine |
+| Employer's code, no policy against it | Check the provider's data-retention terms first |
+| Proprietary or regulated code | Use `--provider local` — the worker runs on your machine and nothing leaves it |
+
+For the local option you install [Ollama](https://ollama.com) and pull a small
+coding model; then `token-save-mcp init --provider local` needs no key at all.
+It is slower than a hosted model, and on a laptop noticeably so, but the code
+never crosses the network.
+
+If you are unsure, start local. You can switch providers with one command later.
+
+---
+
+## What it costs
+
+The worker is far cheaper than your main agent — that is the entire point —
+but it is not free, and the numbers depend on your provider.
+
+A rough shape, for a 600-line file:
+
+- The worker reads ~6,000 tokens and writes ~300. At typical cheap-model rates
+  (under $1 per million input tokens) that is a **fraction of a cent per call**.
+- The same read into a frontier agent's context costs perhaps 10-50× more, and
+  keeps costing, because every later turn pays for it again.
+
+The second point is the one that matters. A file read on turn 20 of a
+200-turn session is not paid for once — it sits in the context that every
+remaining turn re-reads. That compounding is what this removes.
+
+`token-save-mcp stats` shows what you have actually saved, from real usage
+numbers rather than estimates.
 
 ---
 
@@ -114,7 +173,13 @@ Every token-saving tool has the same failure mode — **the agent forgets to use
 it**. A tool the model may ignore gets ignored, and your savings are whatever
 the model felt like that day.
 
-`token-save-mcp install-hook` registers a `PreToolUse` hook that **blocks**
+> **Claude Code only.** The hook uses Claude Code's `PreToolUse` mechanism.
+> In Cursor, Cline, Windsurf or Codex the `bulk_read` and `code_write` tools
+> work normally — you just call them yourself instead of being redirected.
+> `install-hook` says so if it cannot find Claude Code.
+
+`init --hook` installs it during setup; `token-save-mcp install-hook` adds it
+later. Either way it registers a `PreToolUse` hook that **blocks**
 `Read` on files over the threshold and redirects the agent to `bulk_read`:
 
 ```
@@ -138,10 +203,6 @@ token-save-mcp install-hook --hook-mode warn
 ```
 
 Enforcement is **opt-in** and reversible: `token-save-mcp uninstall-hook`.
-
-> The hook is Claude Code only. The `bulk_read` / `code_write` tools are plain
-> MCP and work in any client — Cursor, Cline, Windsurf, Codex — just without
-> the enforcement layer.
 
 ---
 
@@ -184,10 +245,17 @@ code_write(
 Never overwrites: the target is created with `O_EXCL`, which also refuses to
 follow a dangling symlink.
 
+**How do you review code you never saw?** You run it. This is for generated
+work with a cheap check — a test suite you execute, a config you validate, a
+stub you compile. If the correctness of the output depends on reading it
+carefully, skip `target` and have it returned to you instead.
+
 ### `status()`
 
-Prints the live configuration and makes one tiny call to prove the worker is
-actually reachable.
+The MCP tool version of `doctor`: your agent can call it mid-session to see
+the configuration and confirm the worker answers. Use `doctor` from the
+terminal when setting up; use `status()` when a call fails and the agent
+should work out why.
 
 ### `token-save-mcp stats`
 
@@ -261,7 +329,7 @@ seconds, and a worker can be wrong. Use both.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `TOKENSAVE_PROVIDER` | `ollama` | Preset: ollama, openrouter, deepseek, groq, local |
+| `TOKENSAVE_PROVIDER` | `ollama`\* | Preset: ollama, openrouter, deepseek, groq, local |
 | `TOKENSAVE_API_KEY` | — | Overrides the preset's key variable |
 | `TOKENSAVE_BASE_URL` | preset | Any OpenAI-compatible endpoint |
 | `TOKENSAVE_MODEL` | preset | Worker model id |
@@ -275,6 +343,10 @@ seconds, and a worker can be wrong. Use both.
 | `TOKENSAVE_LEDGER` | `~/.token-save/ledger.jsonl` | Where `stats` reads from |
 | `TOKENSAVE_NO_LEDGER` | unset | Set to disable local recording |
 
+\* The default only matters if you set the variables yourself. `init` writes
+whichever provider you chose into the MCP config, so it never applies to a
+normal setup. Delete the ledger any time with `rm ~/.token-save/ledger.jsonl`.
+
 ---
 
 ## When not to use this
@@ -282,6 +354,10 @@ seconds, and a worker can be wrong. Use both.
 Being clear about this is the point, not a disclaimer:
 
 - **You need exact text to edit.** Use a targeted read. The hook lets those through.
+- **You would re-read the file anyway.** If you cannot act on the answer without
+  checking it against the source, you have paid for both. The saving is real
+  only when the answer is enough — which is most survey questions and almost no
+  debugging.
 - **You're debugging subtle behaviour.** Summaries lose the detail that matters.
 - **The file is small.** Under ~350 lines, reading directly is cheaper and faster.
 - **The worker can be wrong.** It's an LLM. For anything you'll act on blindly,

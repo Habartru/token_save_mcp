@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.2.1] — 2026-09-18
+
+Two independent readers were asked to review the README cold. Both found the
+same gaps; this release closes them.
+
+### Fixed
+- `install-hook` now says plainly when Claude Code is not installed, instead of
+  reporting success for a hook that cannot fire. The tools still work in any
+  MCP client — only the automatic blocking is Claude Code's.
+
+### Changed
+- README opens with the cost of *not* using the tool rather than assuming the
+  reader already feels it.
+- **Added "Where your code goes"** — the files you name are sent to the provider
+  you configured, with a table for open-source / employer / proprietary code and
+  the local option for when nothing may leave the machine. This was missing
+  entirely, and for a closed codebase it is the first question.
+- **Added "What it costs"** in money, not just tokens, including why a read on
+  turn 20 of a long session is not paid for once.
+- Requirements no longer imply that enforcement works in all five listed
+  clients.
+- "When not to use this" now admits the real limit: if you would re-read the
+  file anyway, you have paid for both.
+
 ## [0.2.0] — 2026-09-18
 
 Setup is now genuinely two commands. Three things a new user needed that the
