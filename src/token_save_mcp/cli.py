@@ -50,6 +50,7 @@ PROVIDERS = {
 GREEN, YELLOW, RED, DIM, RESET = (
     "\033[32m", "\033[33m", "\033[31m", "\033[2m", "\033[0m"
 )
+CYAN, GREY = "\033[36m", "\033[37m"
 
 
 def ok(msg):
@@ -80,10 +81,64 @@ def _server_command() -> list[str]:
 #  init
 # ---------------------------------------------------------------------------
 
+def _detect_providers() -> list[str]:
+    """Providers whose key is already in the environment.
+
+    Most people already have a key for something. Finding it is friendlier than
+    demanding one for whichever provider happens to be the default.
+    """
+    found = []
+    for name, (key_var, _url, _model) in PROVIDERS.items():
+        if key_var and os.environ.get(key_var):
+            found.append(name)
+    return found
+
+
+def _explain_choices() -> None:
+    """Print the options when nothing is configured, so the next step is obvious."""
+    print("  This tool sends files to a worker model of YOUR choosing.")
+    print("  Nothing is connected automatically and no key ships with it.\n")
+    print(f"  {GREY}Pick whichever you already use, or the cheapest one:{RESET}\n")
+    rows = [
+        ("openrouter", "one key, hundreds of models", "https://openrouter.ai/keys"),
+        ("deepseek", "cheap and strong on code", "https://platform.deepseek.com/api_keys"),
+        ("groq", "fastest responses", "https://console.groq.com/keys"),
+        ("ollama", "Ollama Cloud subscription", "https://ollama.com/settings/keys"),
+        ("local", "your own machine — no key, no data leaves", "needs Ollama running"),
+    ]
+    for name, why, where in rows:
+        key_var = PROVIDERS[name][0]
+        env = f"export {key_var}=..." if key_var else "nothing to set"
+        print(f"  {CYAN}{name:<11}{RESET}{why}")
+        print(f"  {DIM}{'':11}{env}   ({where}){RESET}")
+    print(f"\n  Then run: {CYAN}token-save-mcp init --provider <name>{RESET}")
+    print(f"  {DIM}Any other OpenAI-compatible endpoint: set TOKENSAVE_BASE_URL "
+          f"and TOKENSAVE_API_KEY.{RESET}\n")
+
+
 def cmd_init(args) -> int:
     provider = args.provider
-    key_var, key_url, default_model = PROVIDERS[provider]
 
+    # No provider named: use one whose key is already present, rather than
+    # failing on a default the user may never have heard of.
+    if provider is None:
+        detected = _detect_providers()
+        if len(detected) == 1:
+            provider = detected[0]
+            print(f"\ntoken-save-mcp — setup\n")
+            ok(f"found a key for {provider} in your environment — using it")
+        elif len(detected) > 1:
+            print(f"\ntoken-save-mcp — setup\n")
+            warn(f"keys found for: {', '.join(detected)}")
+            print(f"    Pick one:  token-save-mcp init --provider "
+                  f"{detected[0]}\n")
+            return 1
+        else:
+            print("\ntoken-save-mcp — setup\n")
+            _explain_choices()
+            return 1
+
+    key_var, key_url, default_model = PROVIDERS[provider]
     print(f"\ntoken-save-mcp — setup ({provider})\n")
 
     # 1. Key
@@ -98,14 +153,14 @@ def cmd_init(args) -> int:
         bad(f"no API key in ${key_var}")
         print(f"    Get one at: {key_url}")
         print(f"    Then: export {key_var}=...  (add it to your shell profile)")
+        print(f"    {DIM}and re-run this command — init reads it from the "
+              f"environment.{RESET}")
         if not args.force:
             print("\n  Re-run once the key is set, or pass --force to register anyway.\n")
             return 1
         warn("--force given: registering without a verified key")
 
-    env = {}
-    if provider != "ollama":
-        env["TOKENSAVE_PROVIDER"] = provider
+    env = {"TOKENSAVE_PROVIDER": provider}
     if key:
         env["TOKENSAVE_API_KEY"] = key
     if args.model:
@@ -114,7 +169,9 @@ def cmd_init(args) -> int:
     # 2. Register the MCP server
     cmd = ["claude", "mcp", "add", "--scope", args.scope, "--transport", "stdio"]
     for k, v in env.items():
-        cmd += ["--env", f"{k}={v}"]
+        # Must be --env=K=V as one argument: `-e` accepts a variadic list and
+        # would otherwise swallow the server name that follows it.
+        cmd.append(f"--env={k}={v}")
     cmd += ["token-save", "--"] + _server_command()
 
     if shutil.which("claude"):
@@ -438,8 +495,9 @@ def main(argv=None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("init", help="register the MCP server (one command setup)")
-    p.add_argument("--provider", choices=sorted(PROVIDERS), default="ollama",
-                   help="worker provider (default: ollama)")
+    p.add_argument("--provider", choices=sorted(PROVIDERS), default=None,
+                   help="worker provider; omit to auto-detect from your "
+                        "environment keys")
     p.add_argument("--model", help="worker model id (default: provider's preset)")
     p.add_argument("--scope", choices=["user", "project", "local"], default="user")
     p.add_argument("--hook", action="store_true",

@@ -30,6 +30,9 @@ jobs:
       - name: Server tests (offline, no API calls)
         run: python tests/test_server.py
 
+      - name: CLI tests
+        run: python tests/test_cli.py
+
       - name: Ensure jq (the hook needs it)
         run: |
           command -v jq >/dev/null || {

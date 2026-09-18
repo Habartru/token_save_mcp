@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.1.1] — 2026-09-18
+
+### Fixed
+- **`init` failed to register the server** whenever it passed environment
+  variables: `claude mcp add -e` takes a variadic list and swallowed the server
+  name that followed it. Now passed as a single `--env=KEY=value` argument.
+  This broke `--provider local` outright — the one path that needs no API key.
+- `TOKENSAVE_PROVIDER` was omitted from the registration for the default
+  provider, so a later change of default would have silently moved the worker.
+
+### Changed
+- **`init` with no arguments now onboards you.** It detects a provider key
+  already in your environment and uses it; with several it asks which; with
+  none it prints the options, what each costs you, and the exact variable to
+  export — instead of failing on a default provider you may never have heard of.
+- README states plainly that nothing connects automatically and the worker is
+  yours: your key, your provider, your bill.
+
+### Added
+- 24 CLI tests covering onboarding and the exact shape of the registration
+  command.
+
 ## [0.1.0] — 2026-09-18
 
 First public release.

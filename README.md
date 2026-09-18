@@ -30,12 +30,20 @@ worker: glm-5.3-flash | 6,155 in / 278 out | 4.0s
 
 ```bash
 pip install token-save-mcp
-export OPENROUTER_API_KEY=...            # or OLLAMA_API_KEY, DEEPSEEK_API_KEY…
-token-save-mcp init --provider openrouter --hook
+token-save-mcp init
 ```
 
-That's it — `init` registers the MCP server and installs the hook. No
-hand-edited JSON. Drop `--hook` if you want the tools without enforcement.
+`init` finds a provider key you already have and sets everything up. If you
+have none, it prints the options and where to get one — nothing is connected
+automatically, and no key ships with the tool. **The worker is yours**: your
+key, your provider, your bill.
+
+A full run looks like this:
+
+```bash
+export OPENROUTER_API_KEY=sk-or-...        # your key, from your provider
+token-save-mcp init --provider openrouter --hook
+```
 
 Verify with `token-save-mcp doctor`, which checks the config and makes one
 live call to prove the worker answers:
@@ -45,7 +53,14 @@ live call to prove the worker answers:
 ✓ worker model: deepseek/deepseek-chat
 ✓ MCP server registered and connected
 ✓ enforcement hook installed
-✓ worker replied in 2.0s (21 in / 21 out)
+✓ worker replied in 2.0s (21 in / 13 out)
+```
+
+**Don't want to send code anywhere?** Point it at a model on your own machine —
+no key, no network:
+
+```bash
+token-save-mcp init --provider local        # Ollama on localhost:11434
 ```
 
 <details>
@@ -261,7 +276,8 @@ git clone https://github.com/Habartru/token_save_mcp
 cd token_save_mcp
 pip install -e ".[dev]"
 
-python tests/test_server.py    # 83 offline tests, no API calls
+python tests/test_server.py    # 95 server tests — no API calls
+python tests/test_cli.py       # 24 CLI / onboarding tests
 bash tests/test_hook.sh        # 19 hook routing tests
 ```
 
