@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Server tests (offline, no API calls)
+        run: python tests/test_server.py
+
+      - name: Ensure jq (the hook needs it)
+        run: |
+          command -v jq >/dev/null || {
+            if [ "$RUNNER_OS" = "macOS" ]; then brew install jq;
+            else sudo apt-get update && sudo apt-get install -y jq; fi
+          }
+
+      - name: Hook tests
+        run: bash tests/test_hook.sh
+
+      - name: CLI smoke test
+        run: |
+          token-save-mcp --help
+          token-save-mcp doctor --offline || true
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build twine
+      - run: python -m build
+      - run: twine check dist/*
