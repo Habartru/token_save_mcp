@@ -30,10 +30,17 @@ License: MIT
 """
 
 import asyncio
+import logging
 import os
 import pathlib
 import re
 import time
+
+# The OpenAI SDK logs every request at INFO. On a stdio MCP server that noise
+# lands in the user's terminal alongside the tool's own output.
+logging.getLogger("openai").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpx2").setLevel(logging.WARNING)
 
 from openai import AsyncOpenAI
 

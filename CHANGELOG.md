@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2] — 2026-09-18
+
+### Fixed
+- The OpenAI SDK logs every request at INFO level. On a stdio MCP server that
+  noise landed in the user's terminal, mixed into `doctor` output and tool
+  results. Silenced to WARNING.
+
 ## [0.1.1] — 2026-09-18
 
 ### Fixed
