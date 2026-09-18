@@ -289,6 +289,36 @@ work with a cheap check — a test suite you execute, a config you validate, a
 stub you compile. If the correctness of the output depends on reading it
 carefully, skip `target` and have it returned to you instead.
 
+### `run_command(command, question?, cwd?, timeout?, model?, effort?)`
+
+Run a command and get the verdict, not the output.
+
+```
+run_command(command="pytest -q")
+→ The run failed (exit 1): 3 tests failed, 197 passed in 42.11s.
+
+  FAILED tests/test_payment.py::test_refund_partial
+  E   AssertionError: assert Decimal('12.50') == Decimal('12.55')
+  tests/test_payment.py:142
+
+  Full output (168 lines): ~/.token-save/logs/run-1789759198.log
+  ─────────────────────────────────────────────────────────────
+  token-save: 168 lines | direct ≈2,922 tok → into context ≈202 tok (93%)
+```
+
+A failing suite prints hundreds of lines of setup noise around the four that
+matter. Those hundreds go to the worker; the verdict comes back. **The full
+output is written to a file**, so if the summary missed something you can read
+the part you need — nothing is thrown away.
+
+**Use for:** test suites, builds, linters, type checkers, migrations.
+**Don't use for:** output you need verbatim (`git diff` before an edit),
+interactive commands, or anything short — under ~400 tokens it is returned in
+full rather than sent to a worker at all.
+
+The command runs in a shell with your permissions. It is your command: nothing
+is filtered or sandboxed.
+
 ### `status()`
 
 The MCP tool version of `doctor`: your agent can call it mid-session to see
@@ -430,7 +460,7 @@ git clone https://github.com/Habartru/token_save_mcp
 cd token_save_mcp
 pip install -e ".[dev]"
 
-python tests/test_server.py    # 95 server tests — no API calls
+python tests/test_server.py    # 108 server tests — no API calls
 python tests/test_cli.py       # 34 CLI tests
 bash tests/test_hook.sh        # 21 hook routing tests
 ```

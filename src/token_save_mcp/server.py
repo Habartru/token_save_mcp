@@ -611,6 +611,154 @@ async def code_write(
     )
 
 
+COMMAND_READER_SYSTEM = (
+    "You summarise the output of a command a developer just ran. Lead with what "
+    "matters: did it succeed, and if not, exactly what failed and why. Quote the "
+    "error and the assertion verbatim — a paraphrased stack trace is useless. "
+    "Name the file and line when the output gives them. Ignore setup noise, "
+    "progress bars, and passing cases unless the caller asked about them. "
+    "No preamble, no restating the command. If the output does not say why "
+    "something failed, say that rather than inventing a cause."
+)
+
+
+@mcp.tool()
+async def run_command(
+    command: str,
+    question: str = "",
+    cwd: str = "",
+    timeout: int = 300,
+    model: str = "",
+    effort: str = "low",
+) -> str:
+    """Run a command and get a summary of its output, not the output itself.
+
+    A failing test suite prints hundreds of lines of setup noise around the four
+    that matter. Run it through here and those hundreds go to a worker model;
+    only the summary enters your context. The full output is saved to a file, so
+    you can read any part of it if the summary is not enough.
+
+    USE FOR: test suites, builds, linters, type checkers, migrations — anything
+    that prints a lot and matters only in its verdict.
+
+    DO NOT USE FOR: commands whose exact output you need verbatim (`git diff`
+    before an edit), interactive commands, or anything short — `ls` through a
+    worker model is slower and more expensive than just running it.
+
+    The command runs in a shell, with your permissions, in `cwd`. It is your
+    command: nothing is filtered or sandboxed.
+
+    Args:
+        command: The shell command to run.
+        question: What you want to know. Defaults to asking what failed and why.
+        cwd: Working directory. Defaults to the server's.
+        timeout: Seconds before the command is killed (default 300).
+        model: Worker model override.
+        effort: "low" | "medium" | "high".
+
+    Returns:
+        Exit code, the worker's summary, and the path to the full output.
+    """
+    if not command.strip():
+        return "[error] `command` is empty."
+
+    workdir = None
+    if cwd:
+        workdir = pathlib.Path(cwd).expanduser()
+        if not workdir.is_dir():
+            return f"[error] cwd is not a directory: {cwd}"
+
+    started = time.monotonic()
+    try:
+        proc = await asyncio.create_subprocess_shell(
+            command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,  # interleaved, as a terminal shows it
+            cwd=str(workdir) if workdir else None,
+        )
+        try:
+            raw, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            return (f"[error] command exceeded {timeout}s and was killed:\n"
+                    f"  {command}\n"
+                    f"Raise `timeout` if it legitimately takes longer.")
+    except Exception as exc:
+        return f"[error] could not run the command: {type(exc).__name__}: {exc}"
+
+    elapsed = time.monotonic() - started
+    output = raw.decode("utf-8", errors="replace")
+    exit_code = proc.returncode
+    lines = output.count("\n") + 1 if output else 0
+
+    # Keep the full output where the caller can reach it. Deleting it would
+    # make the summary the only record, and a summary can miss the one line
+    # that mattered.
+    log_path = ""
+    try:
+        log_dir = pathlib.Path(os.environ.get(
+            "TOKENSAVE_LOG_DIR", pathlib.Path.home() / ".token-save" / "logs"))
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / f"run-{int(time.time())}-{abs(hash(command)) % 10000}.log"
+        log_file.write_text(output, encoding="utf-8")
+        log_path = str(log_file)
+        # Keep the last 50; an unbounded directory is its own kind of mess.
+        old = sorted(log_dir.glob("run-*.log"), key=lambda f: f.stat().st_mtime)
+        for stale in old[:-50]:
+            stale.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+    verdict = "succeeded" if exit_code == 0 else f"failed (exit {exit_code})"
+
+    # Short output is cheaper returned as-is than sent to a worker and back.
+    if _estimate_tokens(output) < 400:
+        body = output.rstrip() or "(no output)"
+        return (f"Command {verdict} in {elapsed:.1f}s — output was short, so "
+                f"here it is in full:\n\n{body}")
+
+    prompt = (
+        f"<command>{command}</command>\n"
+        f"<exit_code>{exit_code}</exit_code>\n"
+        f"<question>{question or 'What happened? If it failed, what exactly failed and why?'}</question>\n\n"
+        f"Output:\n{output}"
+    )
+
+    worker = (model or DEFAULT_MODEL).strip()
+    result = await _call(worker, COMMAND_READER_SYSTEM, prompt, effort)
+    result["_model"] = worker
+
+    if not result["ok"]:
+        tail = "\n".join(output.splitlines()[-25:])
+        return (f"Command {verdict} in {elapsed:.1f}s.\n"
+                f"{result['text']}\n\n"
+                f"Falling back to the last 25 lines:\n\n{tail}\n\n"
+                f"Full output: {log_path or '(not saved)'}")
+
+    direct = _estimate_tokens(output)
+    kept = _estimate_tokens(result["text"])
+    saved = direct - kept
+    pct = (saved / direct * 100) if direct else 0.0
+    _record("run_command", direct, kept, lines, result,
+            paths=[command[:120]], question=question)
+
+    where = (f"\nFull output ({lines:,} lines): {log_path}\n"
+             f"Read it with an offset/limit if the summary is not enough."
+             if log_path else "")
+
+    return (
+        f"Command {verdict} in {elapsed:.1f}s.\n\n"
+        f"{result['text']}\n"
+        f"{where}\n"
+        f"---\n"
+        f"token-save: {lines:,} lines of output | direct ≈{direct:,} tok → "
+        f"into context ≈{kept:,} tok (saved ≈{saved:,}, {pct:.0f}%)\n"
+        f"worker: {worker} | {result['in_tokens']:,} in / "
+        f"{result['out_tokens']:,} out | {result['seconds']:.1f}s"
+    )
+
+
 @mcp.tool()
 async def status() -> str:
     """Report the current configuration and check the worker is reachable.

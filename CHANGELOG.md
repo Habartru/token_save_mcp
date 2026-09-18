@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.4.0] — 2026-09-18
+
+### Added
+- **`run_command`** — run a command and get its verdict instead of its output.
+  A failing test suite prints hundreds of lines of setup noise around the four
+  that matter; those hundreds go to the worker and the verdict comes back.
+  Measured 93% on a real 168-line failure.
+
+  The full output is written to `~/.token-save/logs/` and the path is returned,
+  so a summary that missed something costs you nothing — read the part you
+  need. The last 50 runs are kept.
+
+  Short output (under ~400 tokens) is returned verbatim rather than sent to a
+  worker: delegating it would cost more than it saves. If the worker call
+  fails, the last 25 lines come back rather than nothing.
+
+Command output is the second-largest context leak after file reads, and unlike
+file reads nothing else addresses it well — truncating by length throws away
+the stack trace, which is the one part that mattered.
+
 ## [0.3.0] — 2026-09-18
 
 ### Added

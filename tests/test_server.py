@@ -506,6 +506,69 @@ S.LEDGER = _led
 
 
 # ---------------------------------------------------------------------------
+#  run_command
+# ---------------------------------------------------------------------------
+
+section("run_command")
+
+fn_run = S.run_command.fn if hasattr(S.run_command, "fn") else S.run_command
+S.LEDGER = TMP / "run_ledger.jsonl"
+os.environ["TOKENSAVE_LOG_DIR"] = str(TMP / "logs")
+
+r = asyncio.run(fn_run(""))
+check("run-empty-command", "an empty command is refused", "[error]" in r)
+
+r = asyncio.run(fn_run("echo hi", cwd=str(TMP / "nope")))
+check("run-bad-cwd", "a missing cwd is refused before running anything",
+      "[error]" in r and "not a directory" in r)
+
+# Short output costs more to delegate than to return — it should come back whole.
+r = asyncio.run(fn_run("echo alpha && echo beta"))
+check("run-short-verbatim", "short output is returned in full, not summarised",
+      "alpha" in r and "beta" in r and "short" in r, r[:120])
+check("run-short-no-worker", "and no worker call was made for it",
+      "token-save:" not in r)
+
+# Exit code is reported, not swallowed.
+r = asyncio.run(fn_run("exit 3"))
+check("run-reports-exit-code", "a non-zero exit is reported with its code",
+      "exit 3" in r, r[:120])
+
+r = asyncio.run(fn_run("sleep 5", timeout=1))
+check("run-timeout-kills", "a command over the timeout is killed",
+      "[error]" in r and "exceeded" in r)
+check("run-timeout-advises", "and the message says how to allow longer",
+      "timeout" in r.lower())
+
+# Long output goes to the worker; the full log must survive on disk.
+_long = "python3 -c \"print('noise line ' * 4 + chr(10), end='') or [print(f'line {i}: some padding text here to make this long') for i in range(400)]\""
+stub([_Resp(_Msg("- summary of the run"))])
+r = asyncio.run(fn_run(_long))
+check("run-long-summarised", "long output comes back as a summary",
+      "summary of the run" in r, r[:150])
+check("run-long-has-footer", "with a measured savings footer", "token-save:" in r)
+check("run-long-saves-log", "and the full output is written to a file",
+      "Full output" in r and (TMP / "logs").exists())
+
+_logs = sorted((TMP / "logs").glob("run-*.log"), key=lambda f: f.stat().st_mtime)
+check("run-log-complete", "the saved log holds the whole output, not a slice",
+      _logs and "line 399" in _logs[-1].read_text(),
+      f"{len(_logs)} log(s)")
+
+# A failed worker must not lose the output entirely.
+stub([_Status400()])
+r = asyncio.run(fn_run(_long))
+check("run-worker-failure-falls-back", "a failed summary falls back to the tail",
+      "last 25 lines" in r and "line 399" in r, r[:150])
+
+_rows = [l for l in (TMP / "run_ledger.jsonl").read_text().splitlines() if l.strip()]
+check("run-ledger-kind", "the ledger records run_command separately",
+      any('"run_command"' in l for l in _rows), _rows[:1])
+
+del os.environ["TOKENSAVE_LOG_DIR"]
+
+
+# ---------------------------------------------------------------------------
 #  Status tool
 # ---------------------------------------------------------------------------
 
