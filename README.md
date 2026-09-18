@@ -314,9 +314,28 @@ $ token-save-mcp stats --badge
   ![token-save](https://img.shields.io/badge/context%20saved-812K%20tokens-brightgreen)
 ```
 
+It also flags files you keep delegating, and tells the two cases apart:
+
+```
+  Files delegated repeatedly
+
+    4×  src/server.py
+       26.8K worker tokens spent  3 with an identical question
+    3×  src/cli.py
+       13.5K worker tokens spent  all different questions
+
+  The same question asked twice returns the same answer. Keep the
+  first answer in your notes, or ask the follow-up in the same call.
+```
+
+The same question twice is waste — the answer was already paid for. Different
+questions about one file are legitimate, but if you keep going back, asking
+everything in one call costs less than five.
+
 The ledger is a plain JSONL file in `~/.token-save/` and never leaves your
-machine. `--since 7` limits the window; `TOKENSAVE_NO_LEDGER=1` turns recording
-off entirely.
+machine. It records file paths and a **hash** of each question — enough to spot
+a repeat, without putting your prompts on disk. `--since 7` limits the window;
+`TOKENSAVE_NO_LEDGER=1` turns recording off entirely.
 
 ---
 
@@ -412,7 +431,7 @@ cd token_save_mcp
 pip install -e ".[dev]"
 
 python tests/test_server.py    # 95 server tests — no API calls
-python tests/test_cli.py       # 24 CLI / onboarding tests
+python tests/test_cli.py       # 34 CLI tests
 bash tests/test_hook.sh        # 21 hook routing tests
 ```
 

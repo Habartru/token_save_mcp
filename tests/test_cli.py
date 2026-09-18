@@ -188,6 +188,66 @@ if cmd:
 
 
 # ---------------------------------------------------------------------------
+#  Repeat detection
+# ---------------------------------------------------------------------------
+
+section("Repeat detection")
+
+
+def repeats_out(rows):
+    cap = Captured()
+    real, sys.stdout = sys.stdout, cap
+    try:
+        C._report_repeats(rows)
+    finally:
+        sys.stdout = real
+    return cap.text
+
+
+def row(path, qhash, worker_in=5000):
+    return {"paths": [path], "q": qhash, "worker_in": worker_in,
+            "direct_tokens": 7000, "context_tokens": 200, "lines": 600}
+
+
+# Under the threshold: two calls on one file is normal, not a finding.
+out = repeats_out([row("/a.py", "h1"), row("/a.py", "h2")])
+check("under-threshold-quiet", "two calls on a file is not reported", out == "", out)
+
+# The wasteful case: same file, same question, several times.
+out = repeats_out([row("/a.py", "same")] * 4)
+check("same-question-flagged", "repeats of one question are reported",
+      "/a.py" in out and "4×" in out, out)
+check("same-question-counted", "the identical ones are counted",
+      "3 with an identical question" in out, out)
+check("same-question-advises", "and the advice says what to do",
+      "same question" in out.lower(), out)
+
+# The legitimate case: same file, genuinely different questions.
+out = repeats_out([row("/b.py", f"q{i}") for i in range(4)])
+check("different-questions-softer", "different questions are not called waste",
+      "all different questions" in out, out)
+check("different-questions-advises", "but batching is still suggested",
+      "one call" in out.lower(), out)
+
+# Cost is attributed to the file, so the reader knows what it is worth fixing.
+out = repeats_out([row("/c.py", "same", worker_in=10_000)] * 3)
+check("reports-spend", "worker tokens spent on the file are shown",
+      "30K" in out or "30.0K" in out, out)
+
+# A ledger written before paths existed must explain itself, not stay silent.
+out = repeats_out([{"direct_tokens": 100, "context_tokens": 10}] * 5)
+check("legacy-ledger-explained", "an old ledger says why it cannot report",
+      "before v0.3" in out, out)
+
+# Rows with paths but no question hash must not crash or miscount.
+out = repeats_out([{"paths": ["/d.py"], "worker_in": 100}] * 3)
+check("missing-hash-safe", "rows without a question hash still report",
+      "/d.py" in out and "identical" not in out, out)
+
+check("no-rows-no-output", "an empty ledger prints nothing", repeats_out([]) == "")
+
+
+# ---------------------------------------------------------------------------
 
 print("\n" + "═" * 64)
 passed, total = sum(_results), len(_results)

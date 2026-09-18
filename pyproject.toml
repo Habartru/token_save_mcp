@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "token-save-mcp"
-version = "0.2.2"
+version = "0.3.0"
 description = "MCP server that keeps large files out of your coding agent's context by delegating reads to a cheap worker model. Enforced by a hook, measured per call."
 readme = "README.md"
 license = { file = "LICENSE" }

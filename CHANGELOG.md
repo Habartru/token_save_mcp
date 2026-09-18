@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.3.0] — 2026-09-18
+
+### Added
+- **`stats` now flags files you delegate over and over**, and distinguishes the
+  two cases: the same question repeated is waste — that answer was already paid
+  for — while different questions about one file are legitimate, though batching
+  them into one call is cheaper. Each finding carries the worker tokens spent on
+  that file and advice you can act on.
+
+### Changed
+- The ledger now records file paths and a **hash** of the question. A hash
+  answers "was this asked before?" without writing your prompts to disk.
+  Entries written by earlier versions have neither; `stats` says so plainly
+  rather than reporting nothing found.
+
+Prompted by reading [codeburn](https://github.com/getagentseal/codeburn), which
+detects re-read files from session logs. It cannot see *what was asked*, so it
+cannot tell a wasteful repeat from a legitimate follow-up. This ledger can.
+
 ## [0.2.2] — 2026-09-18
 
 ### Changed

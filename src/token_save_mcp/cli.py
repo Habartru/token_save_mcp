@@ -483,6 +483,8 @@ def cmd_stats(args) -> int:
   worker time:   {secs:.0f}s total
 """)
 
+    _report_repeats(rows)
+
     if args.badge:
         label, message = "context saved", f"{_human(saved)} tokens"
         url = (f"https://img.shields.io/badge/"
@@ -490,6 +492,59 @@ def cmd_stats(args) -> int:
         print("  Markdown badge:\n")
         print(f"  ![token-save]({url})\n")
     return 0
+
+
+
+def _report_repeats(rows: list[dict]) -> None:
+    """Flag files delegated over and over, and say what to do about it.
+
+    A repeat is not automatically waste — a different question about the same
+    file is a legitimate second call. The same question twice is the wasteful
+    case, so the two are counted separately and reported differently.
+    """
+    by_path: dict[str, list[dict]] = {}
+    for row in rows:
+        for path in row.get("paths") or []:
+            by_path.setdefault(path, []).append(row)
+
+    # Older ledgers have no paths; say so rather than reporting "nothing found".
+    if not by_path:
+        if any("paths" not in r for r in rows):
+            print(f"  {DIM}Repeat detection needs paths in the ledger; entries "
+                  f"written before v0.3 have none.{RESET}\n")
+        return
+
+    findings = []
+    for path, calls in by_path.items():
+        if len(calls) < 3:
+            continue
+        hashes = [c.get("q") for c in calls if c.get("q")]
+        identical = len(hashes) - len(set(hashes)) if hashes else 0
+        spent = sum(c.get("worker_in", 0) for c in calls)
+        findings.append((len(calls), identical, spent, path))
+
+    if not findings:
+        return
+
+    findings.sort(reverse=True)
+    print(f"  {YELLOW}Files delegated repeatedly{RESET}\n")
+    for count, identical, spent, path in findings[:5]:
+        short = path if len(path) <= 58 else "…" + path[-57:]
+        note = (f"  {RED}{identical} with an identical question{RESET}"
+                if identical else f"  {DIM}all different questions{RESET}")
+        print(f"  {count:>3}×  {short}")
+        print(f"       {_human(spent)} worker tokens spent{note}")
+
+    worst = findings[0]
+    print()
+    if worst[1]:
+        print(f"  {DIM}The same question asked twice returns the same answer. "
+              f"Keep the\n  first answer in your notes, or ask the follow-up "
+              f"in the same call.{RESET}\n")
+    else:
+        print(f"  {DIM}Different questions about one file are fine — but if you "
+              f"keep coming\n  back to it, one call asking everything at once "
+              f"costs less than five.{RESET}\n")
 
 
 def _human(n: int) -> str:
