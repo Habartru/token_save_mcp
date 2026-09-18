@@ -6,7 +6,7 @@ Bug reports and patches are welcome.
 
 ```bash
 pip install -e .
-python tests/test_server.py    # 89 offline tests — no API calls
+python tests/test_server.py    # 95 offline tests — no API calls
 bash tests/test_hook.sh        # 16 hook routing tests (needs jq)
 ```
 

@@ -11,19 +11,17 @@ An MCP server that sends big files to a cheap worker model and returns only the
 answer. The file bytes are paid for once, in the worker's context — not
 permanently in your agent's.
 
-```
-Reading council_mcp_server.py directly   ≈ 5,788 tokens of context, forever
-bulk_read("what's the retry policy?")    ≈   684 tokens — 88% saved
-```
+![token-save-mcp in action](docs/demo.gif)
 
-Every answer carries the worker's **real token usage from the API response**,
-next to the cost of the read it replaced. Not an estimate — a receipt:
+The hook **blocks** the expensive read and redirects it. The answer comes back
+with the worker's **real token usage from the API response** — not an estimate,
+a receipt:
 
 ```
 ─────────────────────────────────────────────────────────────
-token-save: 1 file(s), 443 lines | direct read ≈5,788 tok →
-into Claude ≈684 tok (saved ≈5,104, 88%)
-worker: glm-5.3-flash | 5,379 in / 1,165 out | 5.8s
+token-save: 1 file, 606 lines | direct read ≈7,042 tok →
+into context ≈234 tok (saved 6,808 · 97%)
+worker: glm-5.3-flash | 6,155 in / 278 out | 4.0s
 ```
 
 ---
@@ -85,8 +83,8 @@ the model felt like that day.
 `Read` on files over the threshold and redirects the agent to `bulk_read`:
 
 ```
-Read("src/big_service.py")
-→ BLOCKED: This file is 4,014 lines (threshold: 350).
+Read("src/server.py")
+→ BLOCKED: This file is 606 lines (threshold: 350).
   Use bulk_read to delegate this read instead.
   Need exact content to EDIT? Re-read with offset/limit — that passes through.
 ```
@@ -149,6 +147,28 @@ follow a dangling symlink.
 Prints the live configuration and makes one tiny call to prove the worker is
 actually reachable.
 
+### `token-save-mcp stats`
+
+Every call appends one line to a local ledger, so you can see what the tool has
+actually saved you. Example output after a few weeks of use:
+
+```
+$ token-save-mcp stats --badge
+
+  token-save-mcp — all time
+
+  148 calls · 71,204 lines of code read by a worker
+  context saved: 812,455 tokens (94%)
+  worker time:   612s total
+
+  Markdown badge:
+  ![token-save](https://img.shields.io/badge/context%20saved-812K%20tokens-brightgreen)
+```
+
+The ledger is a plain JSONL file in `~/.token-save/` and never leaves your
+machine. `--since 7` limits the window; `TOKENSAVE_NO_LEDGER=1` turns recording
+off entirely.
+
 ---
 
 ## Measured savings
@@ -157,10 +177,11 @@ Real runs, not projections. Each number is the footer from an actual call:
 
 | What | Size | Direct read | Via token-save | Saved |
 |---|---|---|---|---|
-| One large TS file | 602 lines | ≈13,340 tok | ≈689 tok | **95%** |
-| Production Python | 443 lines | ≈5,788 tok | ≈684 tok | **88%** |
-| 4 files, 102 KB | 1,910 lines | ≈28,379 tok | ≈304 tok | **99%** |
-| Code generation to disk | 58 lines out | — | 0 tok | **100%** |
+| This project's own server.py | 606 lines | ≈7,042 tok | ≈234 tok | **97%** |
+| A large TypeScript handler | 602 lines | ≈13,340 tok | ≈689 tok | **95%** |
+| Production Python service | 443 lines | ≈5,788 tok | ≈684 tok | **88%** |
+| 4 files across a codebase | 1,910 lines | ≈28,379 tok | ≈304 tok | **99%** |
+| Code generation to disk | 58 lines written | — | 0 tok | **100%** |
 
 **Method:** "direct read" is the file's own size at ~3.6 chars/token (source
 code is denser than prose); "via token-save" is the returned answer measured the
@@ -208,6 +229,8 @@ seconds, and a worker can be wrong. Use both.
 | `TOKENSAVE_TIMEOUT` | `600` | Seconds per call |
 | `TOKENSAVE_MAX_RETRIES` | `4` | Retries on transient failures |
 | `TOKENSAVE_MAX_CONCURRENCY` | `3` | Match your provider's limit |
+| `TOKENSAVE_LEDGER` | `~/.token-save/ledger.jsonl` | Where `stats` reads from |
+| `TOKENSAVE_NO_LEDGER` | unset | Set to disable local recording |
 
 ---
 

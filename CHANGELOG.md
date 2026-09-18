@@ -17,7 +17,9 @@ First public release.
   makes a live worker call.
 - Provider presets: Ollama Cloud, OpenRouter, DeepSeek, Groq, local runtimes.
   Any OpenAI-compatible endpoint via `TOKENSAVE_BASE_URL`.
-- 89 offline tests plus 16 hook routing tests; the transport is stubbed, so the
+- `token-save-mcp stats` — a local JSONL ledger of every call, with a
+  shareable badge. Never leaves the machine; opt out with `TOKENSAVE_NO_LEDGER`.
+- 95 offline tests plus 16 hook routing tests; the transport is stubbed, so the
   suite costs nothing to run.
 
 ### Notes
