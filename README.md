@@ -83,19 +83,9 @@ uses a plain API key.
 
 </details>
 
-<details>
-<summary><b>Any OpenAI-compatible endpoint</b></summary>
-
-The presets above are conveniences. Anything that speaks the OpenAI API works:
-
-```bash
-export TOKENSAVE_BASE_URL=https://your-endpoint/v1
-export TOKENSAVE_API_KEY=...
-export TOKENSAVE_MODEL=your-model-id
-token-save-mcp init --provider openrouter   # provider is ignored when BASE_URL is set
-```
-
-</details>
+Using a provider that is not in the list, or want a specific model? See
+[Choosing the worker model](#choosing-the-worker-model) below — there is no
+fixed roster.
 
 Verify anytime with `token-save-mcp doctor` — it checks the configuration and
 makes one live call to prove the worker answers:
@@ -117,6 +107,55 @@ makes one live call to prove the worker answers:
 - An API key from any OpenAI-compatible provider — or a local model, which needs none
 
 Everything else comes with the package.
+
+---
+
+## Choosing the worker model
+
+**There is no fixed list.** Any model id your provider serves works — nothing is
+hardcoded, because a baked-in roster goes stale the day a provider ships
+something new.
+
+```bash
+# switch provider (and get its default model)
+token-save-mcp init --provider deepseek
+
+# pick a specific model
+token-save-mcp init --provider openrouter --model anthropic/claude-3.5-haiku
+
+# per call, when one question deserves a stronger model
+bulk_read(question="...", paths=[...], model="openai/gpt-4o")
+```
+
+Any OpenAI-compatible endpoint at all — including ones with no preset:
+
+```bash
+export TOKENSAVE_BASE_URL=https://api.openai.com/v1
+export TOKENSAVE_API_KEY=sk-...
+export TOKENSAVE_MODEL=gpt-4o-mini
+token-save-mcp init --provider openrouter   # provider ignored once BASE_URL is set
+```
+
+`--model` and `TOKENSAVE_MODEL` do the same thing and work with any provider or
+endpoint; the flag wins if both are set. `--provider` only picks a preset's URL
+and key variable, so once `TOKENSAVE_BASE_URL` is set it no longer matters
+which one you name.
+
+### Which model to pick
+
+The worker reads code and answers questions about it. That is a mechanical job,
+so the cheap tier is usually right — a frontier model here costs more and buys
+little.
+
+| If you want | Reach for |
+|---|---|
+| Cheapest that works | A small/flash model from any provider |
+| Speed above all | Groq, whose whole point is latency |
+| Large corpora in one call | A model with a big context window |
+| Nothing leaves the machine | `--provider local` |
+
+`token-save-mcp doctor` proves whichever you chose actually answers before you
+rely on it.
 
 ---
 

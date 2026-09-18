@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.2] — 2026-09-18
+
+### Changed
+- **Added "Choosing the worker model".** The only mentions of changing the model
+  were a line inside a collapsed block and a cell in the configuration table at
+  the very end — so the obvious question ("can I use my own model?") had no
+  visible answer. Now a section right after Install: there is no fixed roster,
+  how to switch provider or model, how to override for a single call, and which
+  tier to pick if you have no opinion.
+- Documented that `--model` and `TOKENSAVE_MODEL` are equivalent and that the
+  flag wins, and that `--provider` stops mattering once `TOKENSAVE_BASE_URL`
+  is set.
+- Removed the duplicate "any OpenAI-compatible endpoint" block so there is one
+  place describing this, not two.
+
 ## [0.2.1] — 2026-09-18
 
 Two independent readers were asked to review the README cold. Both found the
