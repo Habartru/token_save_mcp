@@ -352,6 +352,74 @@ def cmd_doctor(args) -> int:
 
 
 # ---------------------------------------------------------------------------
+#  stats
+# ---------------------------------------------------------------------------
+
+def _ledger_path() -> pathlib.Path:
+    return pathlib.Path(os.environ.get(
+        "TOKENSAVE_LEDGER", pathlib.Path.home() / ".token-save" / "ledger.jsonl"))
+
+
+def cmd_stats(args) -> int:
+    """Read back the local ledger. Nothing here ever left the machine."""
+    path = _ledger_path()
+    if not path.exists():
+        print(f"\nNo calls recorded yet ({path}).")
+        print("Run a bulk_read, then check back.\n")
+        return 0
+
+    rows = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue  # a truncated last line after a crash is not fatal
+
+    if args.since:
+        import time as _t
+        cutoff = _t.time() - args.since * 86400
+        rows = [r for r in rows if r.get("ts", 0) >= cutoff]
+
+    if not rows:
+        print("\nNo calls in that window.\n")
+        return 0
+
+    direct = sum(r.get("direct_tokens", 0) for r in rows)
+    kept = sum(r.get("context_tokens", 0) for r in rows)
+    saved = direct - kept
+    lines = sum(r.get("lines", 0) for r in rows)
+    secs = sum(r.get("seconds", 0.0) for r in rows)
+    pct = (saved / direct * 100) if direct else 0.0
+    window = f"last {args.since} days" if args.since else "all time"
+
+    print(f"""
+  token-save-mcp — {window}
+
+  {len(rows):,} call{"" if len(rows) == 1 else "s"} · {lines:,} lines of code read by a worker
+  context saved: {GREEN}{saved:,} tokens{RESET} ({pct:.0f}%)
+  worker time:   {secs:.0f}s total
+""")
+
+    if args.badge:
+        label, message = "context saved", f"{_human(saved)} tokens"
+        url = (f"https://img.shields.io/badge/"
+               f"{label.replace(' ', '%20')}-{message.replace(' ', '%20')}-brightgreen")
+        print("  Markdown badge:\n")
+        print(f"  ![token-save]({url})\n")
+    return 0
+
+
+def _human(n: int) -> str:
+    for unit, div in (("B", 1_000_000_000), ("M", 1_000_000), ("K", 1_000)):
+        if n >= div:
+            return f"{n / div:.1f}{unit}".replace(".0", "")
+    return str(n)
+
+
+# ---------------------------------------------------------------------------
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
@@ -378,6 +446,13 @@ def main(argv=None) -> int:
 
     p = sub.add_parser("uninstall-hook", help="remove the hook")
     p.set_defaults(func=cmd_uninstall_hook)
+
+    p = sub.add_parser("stats", help="how much context you have saved so far")
+    p.add_argument("--since", type=int, metavar="DAYS",
+                   help="only count the last N days")
+    p.add_argument("--badge", action="store_true",
+                   help="also print a markdown badge for your README")
+    p.set_defaults(func=cmd_stats)
 
     p = sub.add_parser("doctor", help="diagnose the installation")
     p.add_argument("--offline", action="store_true",

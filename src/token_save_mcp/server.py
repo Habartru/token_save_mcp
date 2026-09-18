@@ -338,6 +338,38 @@ def _strip_fences(text: str) -> str:
     return text.rstrip()
 
 
+# Where the running ledger lives. One JSON line per call; `token-save-mcp stats`
+# reads it back. Nothing leaves the machine.
+LEDGER = pathlib.Path(
+    os.environ.get("TOKENSAVE_LEDGER",
+                   pathlib.Path.home() / ".token-save" / "ledger.jsonl")
+)
+
+
+def _record(kind: str, direct: int, kept: int, lines: int, result: dict) -> None:
+    """Append one line to the ledger. Never let bookkeeping break a real call —
+    a full disk or a read-only home must not turn a good answer into an error."""
+    if os.environ.get("TOKENSAVE_NO_LEDGER"):
+        return
+    try:
+        import json as _json
+        LEDGER.parent.mkdir(parents=True, exist_ok=True)
+        with LEDGER.open("a", encoding="utf-8") as fh:
+            fh.write(_json.dumps({
+                "ts": time.time(),
+                "kind": kind,
+                "direct_tokens": direct,
+                "context_tokens": kept,
+                "lines": lines,
+                "model": result.get("_model", ""),
+                "worker_in": result.get("in_tokens", 0),
+                "worker_out": result.get("out_tokens", 0),
+                "seconds": round(result.get("seconds", 0.0), 2),
+            }) + "\n")
+    except Exception:
+        pass
+
+
 def _savings_report(stats: list[dict], result: dict) -> str:
     """The honest accounting: what the direct read would have cost Claude vs
     what the delegation actually cost it."""
@@ -346,6 +378,8 @@ def _savings_report(stats: list[dict], result: dict) -> str:
     into_claude = _estimate_tokens(result["text"])
     saved = direct - into_claude
     pct = (saved / direct * 100) if direct else 0.0
+
+    _record("bulk_read", direct, into_claude, lines, result)
 
     return (
         f"\n\n---\n"
@@ -536,6 +570,7 @@ async def code_write(
             )
 
         written_lines = code.count("\n") + 1
+        _record("code_write", _estimate_tokens(code), 0, written_lines, result)
         return (
             f"Wrote {target} ({written_lines:,} lines, {len(code):,} bytes).\n"
             f"The generated code was NOT read into your context — Read it "

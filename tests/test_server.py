@@ -467,6 +467,45 @@ check("write-doc-requires-ref", "code_write docstring explains why reference is 
 
 
 # ---------------------------------------------------------------------------
+#  Ledger
+# ---------------------------------------------------------------------------
+
+section("Savings ledger")
+
+import json as _json
+
+_led = TMP / "ledger.jsonl"
+S.LEDGER = _led
+stub([_Resp(_Msg("- an answer"))])
+asyncio.run(fn_bulk("q", [str(BIG)]))
+check("ledger-written", "a call appends one line to the ledger", _led.exists())
+if _led.exists():
+    _rows = [_json.loads(l) for l in _led.read_text().splitlines() if l.strip()]
+    check("ledger-one-row", "exactly one row per call", len(_rows) == 1, len(_rows))
+    check("ledger-fields", "the row carries the numbers stats needs",
+          _rows and all(k in _rows[0] for k in
+                        ("ts", "kind", "direct_tokens", "context_tokens", "lines")))
+    check("ledger-kind", "the row says which tool ran",
+          _rows and _rows[0]["kind"] == "bulk_read")
+
+# Bookkeeping must never break a real call.
+S.LEDGER = pathlib.Path("/proc/nonexistent-dir/ledger.jsonl")
+stub([_Resp(_Msg("- still fine"))])
+r = asyncio.run(fn_bulk("q", [str(BIG)]))
+check("ledger-failure-is-silent", "an unwritable ledger does not fail the call",
+      "still fine" in r, r[:80])
+
+os.environ["TOKENSAVE_NO_LEDGER"] = "1"
+S.LEDGER = TMP / "should-not-appear.jsonl"
+stub([_Resp(_Msg("- opted out"))])
+asyncio.run(fn_bulk("q", [str(BIG)]))
+check("ledger-opt-out", "TOKENSAVE_NO_LEDGER disables recording entirely",
+      not (TMP / "should-not-appear.jsonl").exists())
+del os.environ["TOKENSAVE_NO_LEDGER"]
+S.LEDGER = _led
+
+
+# ---------------------------------------------------------------------------
 #  Status tool
 # ---------------------------------------------------------------------------
 
