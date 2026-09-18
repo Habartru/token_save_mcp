@@ -11,7 +11,8 @@ First public release.
   written straight to disk so the generated code never enters context.
 - `status` — print the live configuration and probe the worker.
 - PreToolUse hook that blocks `Read` on files over a line or byte threshold
-  and redirects to `bulk_read`. Opt-in, reversible.
+  and redirects to `bulk_read`. Opt-in, reversible, and available in a softer
+  `warn` mode that allows the read but reports what it cost.
 - `token-save-mcp init` — one-command setup, no hand-edited JSON.
 - `token-save-mcp doctor` — diagnoses config, dependencies, registration and
   makes a live worker call.
@@ -19,7 +20,7 @@ First public release.
   Any OpenAI-compatible endpoint via `TOKENSAVE_BASE_URL`.
 - `token-save-mcp stats` — a local JSONL ledger of every call, with a
   shareable badge. Never leaves the machine; opt out with `TOKENSAVE_NO_LEDGER`.
-- 95 offline tests plus 16 hook routing tests; the transport is stubbed, so the
+- 95 offline tests plus 19 hook routing tests; the transport is stubbed, so the
   suite costs nothing to run.
 
 ### Notes

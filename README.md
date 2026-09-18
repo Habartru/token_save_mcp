@@ -4,14 +4,14 @@
 
 [![CI](https://github.com/Habartru/token_save_mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/Habartru/token_save_mcp/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/token-save-mcp.svg)](https://pypi.org/project/token-save-mcp/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/Habartru/token_save_mcp/blob/main/LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
 An MCP server that sends big files to a cheap worker model and returns only the
 answer. The file bytes are paid for once, in the worker's context — not
 permanently in your agent's.
 
-![token-save-mcp in action](docs/demo.gif)
+![token-save-mcp in action](https://raw.githubusercontent.com/Habartru/token_save_mcp/main/docs/demo.gif)
 
 The hook **blocks** the expensive read and redirects it. The answer comes back
 with the worker's **real token usage from the API response** — not an estimate,
@@ -94,6 +94,13 @@ What still passes through, by design:
 - **Targeted reads** (`offset`/`limit`) — editing needs exact text
 - **Small files** — under the threshold, delegating costs more than it saves
 - **Binaries** and missing files — nothing to summarise
+
+**Not ready to be told no?** Install it in warn mode instead — the read goes
+through, but you see what it cost:
+
+```bash
+token-save-mcp install-hook --hook-mode warn
+```
 
 Enforcement is **opt-in** and reversible: `token-save-mcp uninstall-hook`.
 
@@ -224,6 +231,7 @@ seconds, and a worker can be wrong. Use both.
 | `TOKENSAVE_BASE_URL` | preset | Any OpenAI-compatible endpoint |
 | `TOKENSAVE_MODEL` | preset | Worker model id |
 | `TOKENSAVE_MIN_LINES` | `350` | Hook threshold, and the "too small" warning |
+| `TOKENSAVE_HOOK_MODE` | `block` | `warn` allows the read but flags the cost |
 | `TOKENSAVE_HOOK_MAX_BYTES` | `100000` | Also block on size — catches minified files |
 | `TOKENSAVE_MAX_CORPUS_BYTES` | `2000000` | Ceiling on one request |
 | `TOKENSAVE_TIMEOUT` | `600` | Seconds per call |
@@ -254,7 +262,7 @@ cd token_save_mcp
 pip install -e ".[dev]"
 
 python tests/test_server.py    # 83 offline tests, no API calls
-bash tests/test_hook.sh        # 16 hook routing tests
+bash tests/test_hook.sh        # 19 hook routing tests
 ```
 
 The test suite stubs the transport, so it costs nothing to run and is safe in

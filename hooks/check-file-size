@@ -56,17 +56,37 @@ if [ "$lines" -le "$MIN_LINES" ] && [ "$bytes" -le "$MAX_BYTES" ]; then
   allow
 fi
 
+# Mode: "block" refuses the read outright; "warn" lets it through but tells the
+# agent what it just cost. Blocking is the point of the tool, but it is also the
+# fastest way to wreck someone's workflow — so the gentler mode is one env var
+# away, and the message is identical either way.
+MODE="${TOKENSAVE_HOOK_MODE:-block}"
+case "$MODE" in block|warn) ;; *) MODE=block ;; esac
+
 # Build the JSON with jq, never by interpolating into a heredoc: a file path may
 # legally contain a quote, a backslash or a newline, any of which would produce
-# malformed JSON. Claude Code cannot parse that, so the block would silently be
-# dropped — the hook would fail open exactly on the weirdest paths.
+# malformed JSON. Claude Code cannot parse that, so the decision would silently
+# be dropped — the hook would fail open exactly on the weirdest paths.
+if [ "$MODE" = "warn" ]; then
+  jq -n --arg path "$file_path" --arg lines "$lines" '
+    {
+      decision: "allow",
+      reason: (
+        "token-save: reading \($lines) lines into context. bulk_read would " +
+        "have delegated this to a worker instead. (warn mode — set " +
+        "TOKENSAVE_HOOK_MODE=block to enforce.)"
+      )
+    }'
+  exit 0
+fi
+
 jq -n --arg path "$file_path" --arg lines "$lines" --arg min "$MIN_LINES" '
   {
     decision: "block",
     reason: (
-      "This file is \($lines) lines (threshold: \($min)). Use the shunt " +
-      "bulk_read MCP tool to delegate the read to a worker model instead of " +
-      "spending that context: bulk_read(question=\"<what you need to know>\", " +
+      "This file is \($lines) lines (threshold: \($min)). Use the bulk_read " +
+      "MCP tool to delegate the read to a worker model instead of spending " +
+      "that context: bulk_read(question=\"<what you need to know>\", " +
       "paths=[\"\($path)\"]). If you need exact content in order to EDIT this " +
       "file, re-read it with an offset/limit for just the section you are " +
       "changing — that is allowed through."

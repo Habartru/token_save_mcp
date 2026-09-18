@@ -49,6 +49,21 @@ got=$(TOKENSAVE_MIN_LINES=abc sh -c "printf '{\"tool_input\":{\"file_path\":\"$B
 [ "$got" = block ] && { printf '  \033[32mPASS\033[0m  %-26s a garbage threshold falls back to 350\n' threshold-garbage; pass=$((pass+1)); } \
                    || { printf '  \033[31mFAIL\033[0m  %-26s got=%s\n' threshold-garbage "$got"; fail=$((fail+1)); }
 
+# Warn mode: the read goes through, but the agent is told what it cost.
+got=$(TOKENSAVE_HOOK_MODE=warn sh -c "printf '{\"tool_input\":{\"file_path\":\"$BIG\"}}' | '$HOOK'" | jq -r '.decision')
+[ "$got" = allow ] && { printf '  \033[32mPASS\033[0m  %-26s warn mode lets the read through\n' warn-mode-allows; pass=$((pass+1)); } \
+                   || { printf '  \033[31mFAIL\033[0m  %-26s got=%s\n' warn-mode-allows "$got"; fail=$((fail+1)); }
+
+reason=$(TOKENSAVE_HOOK_MODE=warn sh -c "printf '{\"tool_input\":{\"file_path\":\"$BIG\"}}' | '$HOOK'" | jq -r '.reason')
+case "$reason" in
+  *bulk_read*) printf '  \033[32mPASS\033[0m  %-26s warn still names the alternative\n' warn-mode-explains; pass=$((pass+1));;
+  *)           printf '  \033[31mFAIL\033[0m  %-26s reason=%s\n' warn-mode-explains "$reason"; fail=$((fail+1));;
+esac
+
+got=$(TOKENSAVE_HOOK_MODE=nonsense sh -c "printf '{\"tool_input\":{\"file_path\":\"$BIG\"}}' | '$HOOK'" | jq -r '.decision')
+[ "$got" = block ] && { printf '  \033[32mPASS\033[0m  %-26s an unknown mode falls back to block\n' warn-mode-garbage; pass=$((pass+1)); } \
+                   || { printf '  \033[31mFAIL\033[0m  %-26s got=%s\n' warn-mode-garbage "$got"; fail=$((fail+1)); }
+
 echo
 echo "════════════════════════════════════════════════════════════════"
 printf 'Total: \033[32m%d passed\033[0m, \033[31m%d failed\033[0m, %d total\n' "$pass" "$fail" "$((pass+fail))"

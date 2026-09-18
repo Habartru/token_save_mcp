@@ -138,7 +138,7 @@ def cmd_init(args) -> int:
 
     # 3. The hook — opt-in, because blocking Read is an intrusive default.
     if args.hook:
-        rc = _install_hook(args.min_lines)
+        rc = _install_hook(args.min_lines, args.hook_mode)
         if rc != 0:
             return rc
     else:
@@ -167,7 +167,7 @@ def _hook_dest() -> pathlib.Path:
     return d / "check-file-size"
 
 
-def _install_hook(min_lines: int) -> int:
+def _install_hook(min_lines: int, mode: str = "block") -> int:
     if HOOK_SRC is None:
         bad("hook script not found in the installed package or the source tree")
         print("    Reinstall with: pip install --force-reinstall token-save-mcp")
@@ -204,20 +204,29 @@ def _install_hook(min_lines: int) -> int:
         pre.append({"matcher": "Read",
                     "hooks": [{"type": "command", "command": str(dest)}]})
         settings.write_text(json.dumps(cfg, indent=2, ensure_ascii=False))
-        ok(f"hook registered for Read (threshold: {min_lines} lines)")
+        ok(f"hook registered for Read (threshold: {min_lines} lines, "
+           f"mode: {mode})")
 
+    env_notes = []
     if min_lines != 350:
-        print(f"    Set TOKENSAVE_MIN_LINES={min_lines} in your environment "
-              f"to match.")
+        env_notes.append(f"TOKENSAVE_MIN_LINES={min_lines}")
+    if mode != "block":
+        env_notes.append(f"TOKENSAVE_HOOK_MODE={mode}")
+    if env_notes:
+        print(f"    Set {' and '.join(env_notes)} in your environment to match.")
+    if mode == "warn":
+        print(f"    {DIM}warn mode: large reads are allowed but flagged. "
+              f"Switch to block when you're ready.{RESET}")
     return 0
 
 
 def cmd_install_hook(args) -> int:
     print("\ntoken-save-mcp — installing the enforcement hook\n")
-    rc = _install_hook(args.min_lines)
+    rc = _install_hook(args.min_lines, args.hook_mode)
     if rc == 0:
-        print(f"\n{GREEN}Done.{RESET} Reads over the threshold will now be "
-              f"redirected to bulk_read.\n"
+        what = ("blocked and redirected to bulk_read" if args.hook_mode == "block"
+                else "allowed, but flagged with what they cost")
+        print(f"\n{GREEN}Done.{RESET} Reads over the threshold will now be {what}.\n"
               f"Remove it with: token-save-mcp uninstall-hook\n")
     return rc
 
@@ -436,12 +445,18 @@ def main(argv=None) -> int:
     p.add_argument("--hook", action="store_true",
                    help="also install the enforcement hook (blocks large Reads)")
     p.add_argument("--min-lines", type=int, default=350)
+    p.add_argument("--hook-mode", choices=["block", "warn"], default="block",
+                   help="block refuses a large Read; warn allows it but flags "
+                        "the cost (default: block)")
     p.add_argument("--force", action="store_true",
                    help="register even without a verified API key")
     p.set_defaults(func=cmd_init)
 
     p = sub.add_parser("install-hook", help="install the Read-blocking hook")
     p.add_argument("--min-lines", type=int, default=350)
+    p.add_argument("--hook-mode", choices=["block", "warn"], default="block",
+                   help="block refuses a large Read; warn allows it but flags "
+                        "the cost (default: block)")
     p.set_defaults(func=cmd_install_hook)
 
     p = sub.add_parser("uninstall-hook", help="remove the hook")
