@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "token-save-mcp"
-version = "0.1.2"
+version = "0.2.0"
 description = "MCP server that keeps large files out of your coding agent's context by delegating reads to a cheap worker model. Enforced by a hook, measured per call."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -27,6 +27,9 @@ classifiers = [
 dependencies = [
     "mcp>=1.2",
     "openai>=1.60",
+    # Corporate networks and VPNs commonly set ALL_PROXY to a SOCKS URL. Without
+    # this the first call dies with an ImportError from inside httpx.
+    "socksio>=1.0",
 ]
 
 [project.urls]
@@ -41,4 +44,4 @@ token-save-mcp-server = "token_save_mcp.server:main"
 packages = ["src/token_save_mcp"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"hooks/check-file-size" = "token_save_mcp/hooks/check-file-size"
+"hooks/check_file_size.py" = "token_save_mcp/hooks/check_file_size.py"

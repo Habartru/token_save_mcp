@@ -8,7 +8,7 @@ Bug reports and patches are welcome.
 pip install -e .
 python tests/test_server.py    # 95 server tests — no API calls
 python tests/test_cli.py       # 24 CLI / onboarding tests
-bash tests/test_hook.sh        # 19 hook routing tests (needs jq)
+bash tests/test_hook.sh        # 21 hook routing tests (needs jq)
 ```
 
 The transport is stubbed, so the suite is free to run and safe in CI.

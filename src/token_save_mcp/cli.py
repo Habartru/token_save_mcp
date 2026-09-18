@@ -26,8 +26,8 @@ def _find_hook() -> pathlib.Path | None:
     wrong means `install-hook` fails for everyone who used pip.
     """
     for candidate in (
-        HERE / "hooks" / "check-file-size",            # installed package
-        HERE.parent.parent / "hooks" / "check-file-size",  # source checkout
+        HERE / "hooks" / "check_file_size.py",              # installed package
+        HERE.parent.parent / "hooks" / "check_file_size.py",  # source checkout
     ):
         if candidate.exists():
             return candidate
@@ -221,7 +221,7 @@ Check config:  token-save-mcp doctor
 def _hook_dest() -> pathlib.Path:
     d = pathlib.Path.home() / ".claude" / "token-save"
     d.mkdir(parents=True, exist_ok=True)
-    return d / "check-file-size"
+    return d / "check_file_size.py"
 
 
 def _install_hook(min_lines: int, mode: str = "block") -> int:
@@ -252,14 +252,17 @@ def _install_hook(min_lines: int, mode: str = "block") -> int:
     pre = cfg.setdefault("hooks", {}).setdefault("PreToolUse", [])
     already = any(
         e.get("matcher") == "Read"
-        and any("check-file-size" in h.get("command", "") for h in e.get("hooks", []))
+        and any("check_file_size" in h.get("command", "")
+                or "check-file-size" in h.get("command", "")
+                for h in e.get("hooks", []))
         for e in pre
     )
     if already:
         ok("hook already registered in settings.json")
     else:
         pre.append({"matcher": "Read",
-                    "hooks": [{"type": "command", "command": str(dest)}]})
+                    "hooks": [{"type": "command",
+                               "command": f"{sys.executable} {dest}"}]})
         settings.write_text(json.dumps(cfg, indent=2, ensure_ascii=False))
         ok(f"hook registered for Read (threshold: {min_lines} lines, "
            f"mode: {mode})")
@@ -304,7 +307,8 @@ def cmd_uninstall_hook(args) -> int:
     kept = [
         e for e in pre
         if not (e.get("matcher") == "Read"
-                and any("check-file-size" in h.get("command", "")
+                and any("check_file_size" in h.get("command", "")
+                        or "check-file-size" in h.get("command", "")
                         for h in e.get("hooks", [])))
     ]
     if len(kept) == len(pre):
@@ -314,7 +318,7 @@ def cmd_uninstall_hook(args) -> int:
         settings.write_text(json.dumps(cfg, indent=2, ensure_ascii=False))
         ok("hook removed from settings.json")
 
-    dest = pathlib.Path.home() / ".claude" / "token-save" / "check-file-size"
+    dest = pathlib.Path.home() / ".claude" / "token-save" / "check_file_size.py"
     if dest.exists():
         dest.unlink()
         ok(f"deleted {dest}")
@@ -356,12 +360,12 @@ def cmd_doctor(args) -> int:
         problems += 1
         S = None
 
-    # jq — the hook needs it
-    if shutil.which("jq"):
-        ok("jq present (required by the hook)")
+    # The hook is pure Python and ships with the package: nothing else to check.
+    if HOOK_SRC is not None:
+        ok("hook script present (no external tools required)")
     else:
-        warn("jq not found — the hook will pass everything through. "
-             "Install it: apt install jq / brew install jq")
+        bad("hook script missing — pip install --force-reinstall token-save-mcp")
+        problems += 1
 
     # MCP registration
     if shutil.which("claude"):
@@ -384,7 +388,8 @@ def cmd_doctor(args) -> int:
         try:
             cfg = json.loads(settings.read_text())
             pre = cfg.get("hooks", {}).get("PreToolUse", [])
-            if any("check-file-size" in h.get("command", "")
+            if any("check_file_size" in h.get("command", "")
+                   or "check-file-size" in h.get("command", "")
                    for e in pre for h in e.get("hooks", [])):
                 ok("enforcement hook installed")
             else:

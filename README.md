@@ -28,63 +28,83 @@ worker: glm-5.3-flash | 6,155 in / 278 out | 4.0s
 
 ## Install
 
+Two commands. Nothing else to install, nothing to configure by hand.
+
 ```bash
 pip install token-save-mcp
-token-save-mcp init
+token-save-mcp init --hook
 ```
 
-`init` finds a provider key you already have and sets everything up. If you
-have none, it prints the options and where to get one — nothing is connected
-automatically, and no key ships with the tool. **The worker is yours**: your
-key, your provider, your bill.
+`init` finds a provider key you already have, registers the MCP server with
+your agent, and installs the hook. If you have no key yet it prints the
+options and where to get one.
 
-A full run looks like this:
+That is the whole setup. There is no second package, no separate MCP server to
+add, and no external tool to install — the hook is plain Python and ships in
+the package.
+
+<details>
+<summary><b>What if I have no API key?</b></summary>
+
+`init` will show you this:
+
+```
+  This tool sends files to a worker model of YOUR choosing.
+  Nothing is connected automatically and no key ships with it.
+
+  openrouter  one key, hundreds of models     export OPENROUTER_API_KEY=...
+  deepseek    cheap and strong on code        export DEEPSEEK_API_KEY=...
+  groq        fastest responses               export GROQ_API_KEY=...
+  ollama      Ollama Cloud subscription       export OLLAMA_API_KEY=...
+  local       your own machine — no key       nothing to set
+```
+
+Pick one, export the key, run `init` again. The key is read from your
+environment and stored in your agent's MCP config — you never paste it into a
+file yourself.
+
+**No key at all?** `--provider local` runs against a model on your own machine
+(Ollama on `localhost:11434`). Nothing leaves the computer.
+
+**Browser login instead of a key?** Not supported. Tools like Kimi Code and
+GitHub Copilot authenticate through a browser and expose no OpenAI-compatible
+endpoint, so they cannot be used as the worker. Every provider listed above
+uses a plain API key.
+
+</details>
+
+<details>
+<summary><b>Any OpenAI-compatible endpoint</b></summary>
+
+The presets above are conveniences. Anything that speaks the OpenAI API works:
 
 ```bash
-export OPENROUTER_API_KEY=sk-or-...        # your key, from your provider
-token-save-mcp init --provider openrouter --hook
+export TOKENSAVE_BASE_URL=https://your-endpoint/v1
+export TOKENSAVE_API_KEY=...
+export TOKENSAVE_MODEL=your-model-id
+token-save-mcp init --provider openrouter   # provider is ignored when BASE_URL is set
 ```
 
-Verify with `token-save-mcp doctor`, which checks the config and makes one
-live call to prove the worker answers:
+</details>
+
+Verify anytime with `token-save-mcp doctor` — it checks the configuration and
+makes one live call to prove the worker answers:
 
 ```
 ✓ provider: openrouter -> https://openrouter.ai/api/v1
 ✓ worker model: deepseek/deepseek-chat
+✓ hook script present (no external tools required)
 ✓ MCP server registered and connected
-✓ enforcement hook installed
-✓ worker replied in 2.0s (21 in / 13 out)
+✓ worker replied in 1.8s (21 in / 13 out)
 ```
 
-**Don't want to send code anywhere?** Point it at a model on your own machine —
-no key, no network:
+### Requirements
 
-```bash
-token-save-mcp init --provider local        # Ollama on localhost:11434
-```
+- Python 3.10+
+- An agent that speaks MCP (Claude Code, Cursor, Cline, Windsurf, Codex)
+- An API key from any OpenAI-compatible provider — or a local model, which needs none
 
-<details>
-<summary>Providers</summary>
-
-Any OpenAI-compatible endpoint works. Presets:
-
-| `--provider` | Endpoint | Key variable |
-|---|---|---|
-| `ollama` *(default)* | ollama.com | `OLLAMA_API_KEY` |
-| `openrouter` | openrouter.ai | `OPENROUTER_API_KEY` |
-| `deepseek` | api.deepseek.com | `DEEPSEEK_API_KEY` |
-| `groq` | api.groq.com | `GROQ_API_KEY` |
-| `local` | localhost:11434 | *(none)* |
-
-Anything else: set `TOKENSAVE_BASE_URL` and `TOKENSAVE_API_KEY` directly.
-With `local` your code never leaves the machine.
-
-The transport is the plain OpenAI SDK pointed at a `base_url`, so any
-OpenAI-compatible endpoint works. The measurements below were taken against
-Ollama Cloud; the other presets are configured and exercised by the test suite
-but their numbers will differ with the model you pick.
-
-</details>
+Everything else comes with the package.
 
 ---
 
@@ -278,7 +298,7 @@ pip install -e ".[dev]"
 
 python tests/test_server.py    # 95 server tests — no API calls
 python tests/test_cli.py       # 24 CLI / onboarding tests
-bash tests/test_hook.sh        # 19 hook routing tests
+bash tests/test_hook.sh        # 21 hook routing tests
 ```
 
 The test suite stubs the transport, so it costs nothing to run and is safe in

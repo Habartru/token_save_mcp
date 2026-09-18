@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.2.0] — 2026-09-18
+
+Setup is now genuinely two commands. Three things a new user needed that the
+package did not provide are all shipped or removed.
+
+### Fixed
+- **`socksio` is now a dependency.** Behind a SOCKS proxy — common on VPNs and
+  corporate networks — the first call died with an ImportError from inside
+  httpx, and the fix was an undocumented `pip install 'httpx[socks]'`.
+- **The hook no longer needs `jq`.** It is Python now and ships in the package.
+  Previously it silently passed every read through on any machine without jq,
+  so enforcement was off and nobody was told.
+
+### Changed
+- README states plainly that this is one package and one command; there is no
+  second MCP server to install and no external tool to add.
+- `doctor` checks for the hook script instead of jq.
+- Documented that browser-login tools (Kimi Code, Copilot) cannot be used as
+  the worker — they expose no OpenAI-compatible endpoint.
+
+### Added
+- Hook tests for running without jq and for a filename containing a quote.
+
 ## [0.1.2] — 2026-09-18
 
 ### Fixed
