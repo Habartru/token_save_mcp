@@ -569,6 +569,52 @@ del os.environ["TOKENSAVE_LOG_DIR"]
 
 
 # ---------------------------------------------------------------------------
+#  Starting without a key
+# ---------------------------------------------------------------------------
+
+section("Missing key (server must still start)")
+
+# A registry checking the server, or a client listing tools, connects before
+# anything could be configured. Dying at import turns "not set up yet" into
+# "this server is broken" — and the listing check fails.
+check("starts-without-key", "the module imports with no key present",
+      hasattr(S, "KEY_MISSING"))
+check("key-error-exists", "there is a message for the unconfigured case",
+      callable(getattr(S, "_key_error", None)))
+
+_msg = S._key_error()
+check("key-error-names-var", "it names the variable to set",
+      "API_KEY" in _msg, _msg[:80])
+check("key-error-says-how", "and how to fix it",
+      "init" in _msg or "doctor" in _msg, _msg[:120])
+
+_saved = S.KEY_MISSING
+S.KEY_MISSING = True
+try:
+    r = asyncio.run(fn_bulk("q", [str(BIG)]))
+    check("bulk-refuses-without-key", "bulk_read refuses clearly, not cryptically",
+          "[error]" in r and "API key" in r, r[:80])
+    r = asyncio.run(fn_write("spec", [str(REF)]))
+    check("write-refuses-without-key", "code_write refuses the same way",
+          "[error]" in r and "API key" in r, r[:80])
+    r = asyncio.run(fn_run("echo hi"))
+    check("run-refuses-without-key", "run_command refuses too",
+          "[error]" in r and "API key" in r, r[:80])
+
+    # status must work without a key: it is how you find out what is wrong.
+    _st = S.status.fn if hasattr(S.status, "fn") else S.status
+    r = asyncio.run(_st())
+    check("status-works-without-key", "status still reports, rather than failing",
+          "provider" in r and "[error]" not in r, r[:80])
+    check("status-flags-missing-key", "and says the key is what is missing",
+          "no api key" in r.lower(), repr(r))
+    check("status-never-masks-placeholder", "the placeholder is not shown as a key",
+          "not-co" not in r and "NOT SET" in r, r[:200])
+finally:
+    S.KEY_MISSING = _saved
+
+
+# ---------------------------------------------------------------------------
 #  Status tool
 # ---------------------------------------------------------------------------
 

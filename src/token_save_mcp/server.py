@@ -85,16 +85,30 @@ BASE_URL = os.environ.get("TOKENSAVE_BASE_URL", _preset_url)
 API_KEY = os.environ.get("TOKENSAVE_API_KEY", "")
 if not API_KEY and _preset_key_var:
     API_KEY = os.environ.get(_preset_key_var, "")
-if not API_KEY:
+
+# A missing key must NOT stop the server from starting. A client — or a registry
+# checking that the server works — connects and asks what tools exist before it
+# could possibly have configured anything. Dying at import turns "not configured
+# yet" into "this server is broken". The error belongs at the first real call,
+# where the person can see it and act on it.
+KEY_MISSING = not API_KEY
+if KEY_MISSING:
     if PROVIDER == "local" or BASE_URL.startswith(("http://localhost",
                                                    "http://127.0.0.1")):
         API_KEY = "not-needed"
+        KEY_MISSING = False
     else:
-        raise SystemExit(
-            f"No API key. Set {_preset_key_var or 'TOKENSAVE_API_KEY'} "
-            f"(provider: {PROVIDER}).\n"
-            f"Run `token-save-mcp doctor` to check your configuration."
-        )
+        API_KEY = "not-configured"   # placeholder: the SDK rejects an empty string
+
+
+def _key_error() -> str:
+    return (
+        f"[error] No API key configured. Set "
+        f"{_preset_key_var or 'TOKENSAVE_API_KEY'} (provider: {PROVIDER}), "
+        f"then restart your agent.\n"
+        f"Run `token-save-mcp init` to set this up, or `token-save-mcp doctor` "
+        f"to check what is missing."
+    )
 
 # The worker model. Unlike a fixed roster, any model id the provider serves is
 # allowed — a hardcoded list goes stale the moment a provider ships a new one.
@@ -453,6 +467,8 @@ async def bulk_read(
     Returns:
         The worker's answer plus a measured token-savings footer.
     """
+    if KEY_MISSING:
+        return _key_error()
     if not question.strip():
         return "[error] `question` is empty. The worker needs to know what to look for."
 
@@ -525,6 +541,8 @@ async def code_write(
     Returns:
         A write confirmation (with `target`), or the generated code.
     """
+    if KEY_MISSING:
+        return _key_error()
     if not spec.strip():
         return "[error] `spec` is empty. The worker needs to know what to generate."
     if not reference:
@@ -659,6 +677,8 @@ async def run_command(
     Returns:
         Exit code, the worker's summary, and the path to the full output.
     """
+    if KEY_MISSING:
+        return _key_error()
     if not command.strip():
         return "[error] `command` is empty."
 
@@ -766,7 +786,11 @@ async def status() -> str:
     Use when delegation is failing. Makes one tiny model call to prove the
     endpoint and key actually work.
     """
-    masked = (API_KEY[:6] + "…") if len(API_KEY) > 8 else ("set" if API_KEY else "MISSING")
+    # Never print the placeholder as if it were a key: "not-co…" reads like a
+    # configured value and sends people looking for a problem elsewhere.
+    masked = ("NOT SET" if KEY_MISSING
+              else (API_KEY[:6] + "…") if len(API_KEY) > 8
+              else ("set" if API_KEY else "MISSING"))
     lines = [
         "### token-save-mcp",
         "",
@@ -779,6 +803,15 @@ async def status() -> str:
         f"timeout        : {TIMEOUT:.0f}s | retries {MAX_RETRIES} | concurrency {MAX_CONCURRENCY}",
         "",
     ]
+
+    if KEY_MISSING:
+        lines += [
+            f"worker reachable: NO — no API key configured",
+            "",
+            f"Set {_preset_key_var or 'TOKENSAVE_API_KEY'} and restart your agent,",
+            "or run `token-save-mcp init` to configure it.",
+        ]
+        return "\n".join(lines)
 
     probe = await _call(DEFAULT_MODEL, "Reply with the single word: ok",
                         "Reply with the single word: ok", "low")

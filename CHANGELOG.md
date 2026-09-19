@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.1] — 2026-09-19
+
+### Fixed
+- **The server exited at startup when no API key was set.** A client — or a
+  registry verifying the server works — connects and asks what tools exist
+  before anything could have been configured, so "not set up yet" looked
+  like "this server is broken". It now starts, answers introspection with all
+  four tools, and reports the missing key when a tool is actually called,
+  where the person can see it and act on it.
+- `status` no longer prints the internal placeholder as if it were a
+  configured key (`not-co…`); it says `NOT SET`.
+
 ## [0.4.0] — 2026-09-18
 
 ### Added

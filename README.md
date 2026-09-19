@@ -460,7 +460,7 @@ git clone https://github.com/Habartru/token_save_mcp
 cd token_save_mcp
 pip install -e ".[dev]"
 
-python tests/test_server.py    # 108 server tests — no API calls
+python tests/test_server.py    # 118 server tests — no API calls
 python tests/test_cli.py       # 34 CLI tests
 bash tests/test_hook.sh        # 21 hook routing tests
 ```
